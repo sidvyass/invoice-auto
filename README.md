@@ -13,11 +13,51 @@ uv run streamlit run streamlit_app.py
 
 Open the local URL printed by Streamlit. Fill in one ticket, select **Generate invoice**, review the amount, and download the PDF. Submitting again creates a new invoice number. Downloading or refreshing the page retains the current invoice within that browser session. The web app does not store PDFs on the server.
 
+Each successful web invoice is added to the local `generated_invoices.csv` register. The **Generated invoices** page displays its rows and has one **Download CSV** button. The register is ignored by Git because it contains customer and passenger details. If the app runs on Streamlit Community Cloud, download the CSV regularly: files created while a hosted app runs are [not guaranteed to persist](https://docs.streamlit.io/develop/concepts/configuration/serving-static-files). The CLI does not add rows to this web register.
+
 The **Settings** page lets you edit the seller name, website, address, contact and tax details, bank details, and terms in the same order they appear on the PDF. Save settings before generating a new invoice. Changes apply only to your current browser session; another user sees the defaults, and a new session starts with the defaults again. Text that cannot fit the fixed invoice layout is rejected. Existing PDFs keep the seller details used when they were generated. The CLI always uses the defaults in `invoice_generator.py`.
 
 The CLI remains available with `uv run python invoice_generator.py`. It prompts for one ticket and writes `invoices/invoice_<generated-number>.pdf`. Use `--output-dir PATH` to choose a different folder and `--no-stamp` to omit the bundled stamp image. Existing PDFs are never overwritten.
 
-## What to enter
+## Chat with AI
+
+After generating an invoice, click **Chat with AI** to request changes to ticket fields,
+customer details, amounts, or remarks. The gradient AI button opens a panel on the right
+with a scrolling conversation and an input beneath it. Closing the panel keeps your
+conversation and any pending proposal. The app uses `openai/gpt-5-nano` through
+OpenRouter. Add your key to a `.env` file in the project directory:
+
+```dotenv
+openrouter_api_key=your-openrouter-api-key
+```
+
+`OPENROUTER_API_KEY` is also supported. Server environment variables take precedence
+over Streamlit secrets and `.env`. On Streamlit Community Cloud, add the key in app
+secrets instead. Keys stay on the server; `.env` and `.streamlit/secrets.toml` are ignored
+by Git. Run `uv sync` after updating the repository.
+
+The AI proposes edits; Python validates fields, calculates totals, and builds a preview
+PDF. Select **Apply changes** to update the invoice and download, or **Discard** to keep
+the current version. Ambiguous requests prompt a clarification. Seller settings,
+bank details, invoice numbers, and PDF layout cannot be changed through chat.
+Invoice fields and recent conversation messages are sent to OpenRouter and its model
+provider when you send a message. No PDF or seller bank details are sent.
+
+Accepted edits retain the invoice number and add a revision to the CSV register.
+Existing CSV rows are treated as revision 1 and migrated on the next successful write.
+The history page shows the latest revision by default; select **Show all revisions**
+to view and export older versions too. PDF filenames include their revision.
+The form is updated to match accepted changes. Generating another invoice starts a new
+conversation. Chat history and editable invoice data last only for the browser session;
+older CSV entries cannot be reopened for editing.
+
+Run the complete test suite (API calls are mocked):
+
+```sh
+uv run python -m unittest -v
+```
+
+## Invoice fields
 
 Enter dates as `YYYY-MM-DD` in the CLI and rupee amounts without commas or currency symbols. The fields are issued date, travel date, passenger name, destination/route, TBO PNR, Riya PNR, NET, Processing Charges, GST rate, seat charge, seat margin, seat gross, company name, company GSTIN, and remark. Either TBO PNR or Riya PNR is required. Company GSTIN, remark, and seat fields may be blank. Blank Processing Charges and seat amounts mean zero. GST rate defaults to 18% and can be changed for an invoice.
 
@@ -30,6 +70,7 @@ The sample JSON is a reference for automated tests; normal users enter the same 
 ```sh
 uv run python -m unittest -v test_invoice_generator.py
 uv run python -m unittest -v test_streamlit_app.py
+uv run python -m unittest -v test_invoice_register.py
 ```
 
 Long text that cannot fit the fixed page is rejected with an error. The script does not send invoices, track invoice numbers in a ledger, or determine whether GST legally applies to a ticket.

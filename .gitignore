@@ -3,3 +3,8 @@ __pycache__/
 *.py[cod]
 invoices/
 invoice_*.pdf
+generated_invoices.csv
+generated_invoices.csv.lock
+.streamlit/secrets.toml
+
+.env
