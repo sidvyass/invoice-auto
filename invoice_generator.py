@@ -18,7 +18,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
@@ -203,6 +203,22 @@ def parse_ticket(data: dict[str, Any]) -> Ticket:
     return ticket
 
 
+def validate_seller(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate editable seller text before using it in the fixed PDF layout."""
+    d = _check_fields(data, set(COMPANY), "seller settings")
+    result = {}
+    for key in COMPANY:
+        if key in ("address_lines", "terms"):
+            expected = len(COMPANY[key])
+            value = d[key]
+            if not isinstance(value, (list, tuple)) or len(value) != expected:
+                raise InvoiceError(f"{key} must contain exactly {expected} lines.")
+            result[key] = tuple(_text(line, f"{key}[{index}]") for index, line in enumerate(value))
+        else:
+            result[key] = _text(d[key], key)
+    return result
+
+
 _SMALL = (
     "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
     "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
@@ -322,12 +338,13 @@ class _Painter:
 
 
 def build_pdf(ticket: Ticket, totals: Totals, invoice_number: str, *, fonts: FontSet = DEFAULT_FONTS,
-              stamp_path: Path | None = DEFAULT_STAMP) -> bytes:
+              stamp_path: Path | None = DEFAULT_STAMP,
+              seller: Mapping[str, Any] = COMPANY) -> bytes:
     """Render in memory. Overflow is an error, not a clipped or reformatted PDF."""
     output = BytesIO()
     c = Canvas(output, pagesize=(PAGE_WIDTH, PAGE_HEIGHT), pageCompression=1)
     c.setTitle(f"Air Ticket Invoice {invoice_number}")
-    c.setAuthor(COMPANY["name"])
+    c.setAuthor(seller["name"])
     c.setSubject("Air ticket invoice")
     p = _Painter(c, fonts)
 
@@ -354,15 +371,15 @@ def build_pdf(ticket: Ticket, totals: Totals, invoice_number: str, *, fonts: Fon
     p.rule(345.25, 312.4, 345.25, 388.0)
 
     # Company header and contact block.
-    p.text(LEFT, 27.95, COMPANY["name"], size=11.1, max_width=385, field="COMPANY.name")
-    p.text(RIGHT, 26.25, COMPANY["website"], align="right", max_width=130, field="COMPANY.website")
-    for text, top in zip(COMPANY["address_lines"], (41.65, 52.85, 64.05)):
-        p.text(LEFT, top, text, max_width=328, field="COMPANY.address_lines")
+    p.text(LEFT, 27.95, seller["name"], size=11.1, max_width=385, field="seller.name")
+    p.text(RIGHT, 26.25, seller["website"], align="right", max_width=130, field="seller.website")
+    for text, top in zip(seller["address_lines"], (41.65, 52.85, 64.05)):
+        p.text(LEFT, top, text, max_width=328, field="seller.address_lines")
     for symbol, key, top in (("P", "phone", 41.65), ("M", "mobile", 52.85), ("@", "email", 64.05)):
         p.text(381.3, top - 0.05, symbol, align="center", max_width=8.4)
-        p.text(386.2, top, COMPANY[key], max_width=RIGHT - 386.2, field=f"COMPANY.{key}")
-    p.text(LEFT, 76.25, f"GST No. {COMPANY['gstin']}", max_width=328)
-    p.text(377.1, 76.25, f"PAN No. {COMPANY['pan']}", max_width=198.1)
+        p.text(386.2, top, seller[key], max_width=RIGHT - 386.2, field=f"seller.{key}")
+    p.text(LEFT, 76.25, f"GST No. {seller['gstin']}", max_width=328)
+    p.text(377.1, 76.25, f"PAN No. {seller['pan']}", max_width=198.1)
 
     # Buyer and ticket identity. Blank address space is retained.
     p.text(LEFT, 90.25, "To,")
@@ -417,17 +434,17 @@ def build_pdf(ticket: Ticket, totals: Totals, invoice_number: str, *, fonts: Fon
     p.text(RIGHT, 274.75, f"{totals.net_amount:.2f}", align="right", max_width=65, field="net amount")
     p.text(LEFT, 286.65, totals.amount_in_words, max_width=RIGHT - LEFT, field="amount in words")
 
-    bank_line_1 = (f"NAME OF THE ACCOUNT:{COMPANY['bank_account_name']},ACCOUNT NUMBER "
-                   f"{COMPANY['bank_account_number']},BANK NAME:{COMPANY['bank_name']} IFSC")
-    bank_line_2 = f"CODE:{COMPANY['bank_ifsc']};{COMPANY['bank_account_type']};{COMPANY['bank_city']}"
+    bank_line_1 = (f"NAME OF THE ACCOUNT:{seller['bank_account_name']},ACCOUNT NUMBER "
+                   f"{seller['bank_account_number']},BANK NAME:{seller['bank_name']} IFSC")
+    bank_line_2 = f"CODE:{seller['bank_ifsc']};{seller['bank_account_type']};{seller['bank_city']}"
     for text, y in ((bank_line_1, 299.2), (bank_line_2, 310.35)):
         p.text(LEFT, y, text, font=fonts.bold, size=BOLD_SIZE, max_width=RIGHT - LEFT, field="bank details")
 
     p.text(LEFT, 321.25, "Terms :", font=fonts.bold_italic, size=6.5)
     p.text(344.15, 320.8, "E.  & O.  E.", size=6.8, align="right")
-    for term, y in zip(COMPANY["terms"], (330.5, 339.7, 348.8, 357.9, 367.0)):
-        p.text(LEFT, y, term, size=6.8, max_width=298, field="COMPANY.terms")
-    p.text(RIGHT, 323.05, f"for {COMPANY['name']}", align="right", max_width=226, field="company sign-off")
+    for term, y in zip(seller["terms"], (330.5, 339.7, 348.8, 357.9, 367.0)):
+        p.text(LEFT, y, term, size=6.8, max_width=298, field="seller.terms")
+    p.text(RIGHT, 323.05, f"for {seller['name']}", align="right", max_width=226, field="company sign-off")
     if stamp_path is not None:
         path = Path(stamp_path)
         if not path.is_file():
@@ -457,10 +474,12 @@ def new_invoice_number(issued_date: date) -> str:
 
 
 def generate_invoice(ticket: Ticket, output_path: str | Path, invoice_number: str, *,
-                     fonts: FontSet = DEFAULT_FONTS, stamp_path: Path | None = DEFAULT_STAMP) -> Totals:
+                     fonts: FontSet = DEFAULT_FONTS, stamp_path: Path | None = DEFAULT_STAMP,
+                     seller: Mapping[str, Any] = COMPANY) -> Totals:
     """Render one ticket and create a new PDF without overwriting an existing invoice."""
     totals = calculate_totals(ticket)
-    content = build_pdf(ticket, totals, invoice_number, fonts=fonts, stamp_path=stamp_path)
+    content = build_pdf(ticket, totals, invoice_number, fonts=fonts, stamp_path=stamp_path,
+                        seller=seller)
     _write_output(Path(output_path), content)
     return totals
 

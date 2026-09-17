@@ -13,6 +13,8 @@ uv run streamlit run streamlit_app.py
 
 Open the local URL printed by Streamlit. Fill in one ticket, select **Generate invoice**, review the amount, and download the PDF. Submitting again creates a new invoice number. Downloading or refreshing the page retains the current invoice within that browser session. The web app does not store PDFs on the server.
 
+The **Settings** page lets you edit the seller name, website, address, contact and tax details, bank details, and terms in the same order they appear on the PDF. Save settings before generating a new invoice. Changes apply only to your current browser session; another user sees the defaults, and a new session starts with the defaults again. Text that cannot fit the fixed invoice layout is rejected. Existing PDFs keep the seller details used when they were generated. The CLI always uses the defaults in `invoice_generator.py`.
+
 The CLI remains available with `uv run python invoice_generator.py`. It prompts for one ticket and writes `invoices/invoice_<generated-number>.pdf`. Use `--output-dir PATH` to choose a different folder and `--no-stamp` to omit the bundled stamp image. Existing PDFs are never overwritten.
 
 ## What to enter
