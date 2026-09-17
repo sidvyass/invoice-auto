@@ -59,6 +59,7 @@ PAGE_WIDTH, PAGE_HEIGHT = 595.0, 841.0
 LEFT, RIGHT = 44.6, 575.2
 BODY_SIZE, BOLD_SIZE = 7.7, 7.3
 MONEY_UNIT = Decimal("0.01")
+RATE_UNIT = Decimal("0.001")
 DEFAULT_STAMP = Path(__file__).resolve().parent / "assets" / "stamp.png"
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
@@ -86,7 +87,8 @@ class Ticket:
     tbo_pnr: str
     riya_pnr: str
     net: Decimal
-    mark_up: Decimal
+    processing_charges: Decimal
+    gst_rate: Decimal
     seat_charge: Decimal
     seat_margin: Decimal
     seat_gross: Decimal | None
@@ -106,8 +108,11 @@ class Ticket:
 @dataclass(frozen=True)
 class Totals:
     net: Decimal
-    mark_up: Decimal
     seat_amount: Decimal
+    ticket_cost: Decimal
+    processing_charges: Decimal
+    gst_rate: Decimal
+    gst: Decimal
     net_amount: Decimal
     amount_in_words: str
 
@@ -139,16 +144,16 @@ def _text(value: Any, label: str, *, empty_ok: bool = False) -> str:
     return result
 
 
-def _decimal(value: Any, label: str) -> Decimal:
+def _decimal(value: Any, label: str, unit: Decimal = MONEY_UNIT) -> Decimal:
     if isinstance(value, bool) or not isinstance(value, (str, int, Decimal)):
         raise InvoiceError(f"{label} must be a decimal string such as '7650.00', not a float.")
     try:
         result = Decimal(value)
         if not result.is_finite() or result < 0 or result >= Decimal("1000000000"):
             raise InvoiceError(f"{label} must be finite, nonnegative, and below 1,000,000,000.")
-        rounded = result.quantize(MONEY_UNIT, rounding=ROUND_HALF_UP)
+        rounded = result.quantize(unit, rounding=ROUND_HALF_UP)
         if rounded != result:
-            raise InvoiceError(f"{label} may have at most 2 decimal places.")
+            raise InvoiceError(f"{label} may have at most {-unit.as_tuple().exponent} decimal places.")
         return rounded.copy_abs()  # Normalize a possible negative zero.
     except (InvalidOperation, ValueError, OverflowError) as exc:
         if isinstance(exc, InvoiceError):
@@ -166,9 +171,9 @@ def _date(value: Any, label: str) -> date:
 
 
 def parse_ticket(data: dict[str, Any]) -> Ticket:
-    """Validate one ticket using only fields from the tracking sheet."""
+    """Validate one ticket and its selected GST rate."""
     fields = {"issued_date", "travel_date", "passenger_name", "destination", "tbo_pnr",
-              "riya_pnr", "net", "mark_up", "seat_charge", "seat_margin", "seat_gross",
+              "riya_pnr", "net", "processing_charges", "gst_rate", "seat_charge", "seat_margin", "seat_gross",
               "company_name", "company_gstin", "remark"}
     d = _check_fields(data, fields, "ticket")
     gstin = _text(d["company_gstin"], "company_gstin", empty_ok=True)
@@ -182,7 +187,8 @@ def parse_ticket(data: dict[str, Any]) -> Ticket:
         tbo_pnr=_text(d["tbo_pnr"], "tbo_pnr", empty_ok=True),
         riya_pnr=_text(d["riya_pnr"], "riya_pnr", empty_ok=True),
         net=_decimal(d["net"], "net"),
-        mark_up=_decimal(d["mark_up"], "mark_up"),
+        processing_charges=_decimal(d["processing_charges"], "processing_charges"),
+        gst_rate=_decimal(d["gst_rate"], "gst_rate", RATE_UNIT),
         seat_charge=_decimal(d["seat_charge"], "seat_charge"),
         seat_margin=_decimal(d["seat_margin"], "seat_margin"),
         seat_gross=None if d["seat_gross"] in (None, "") else _decimal(d["seat_gross"], "seat_gross"),
@@ -192,6 +198,8 @@ def parse_ticket(data: dict[str, Any]) -> Ticket:
     )
     if not ticket.pnr:
         raise InvoiceError("Enter a TBO PNR or Riya PNR.")
+    if ticket.gst_rate > 100:
+        raise InvoiceError("gst_rate must be between 0 and 100 percent.")
     return ticket
 
 
@@ -228,8 +236,13 @@ def amount_in_words(amount: Decimal) -> str:
 
 
 def calculate_totals(ticket: Ticket) -> Totals:
-    total = ticket.net + ticket.mark_up + ticket.seat_amount
-    return Totals(ticket.net, ticket.mark_up, ticket.seat_amount, total, amount_in_words(total))
+    ticket_cost = ticket.net + ticket.seat_amount
+    gst = (ticket.processing_charges * ticket.gst_rate / Decimal("100")).quantize(
+        MONEY_UNIT, rounding=ROUND_HALF_UP
+    )
+    total = ticket_cost + ticket.processing_charges + gst
+    return Totals(ticket.net, ticket.seat_amount, ticket_cost, ticket.processing_charges,
+                  ticket.gst_rate, gst, total, amount_in_words(total))
 
 
 def register_fonts(regular_path: Path, bold_path: Path, italic_path: Path | None = None) -> FontSet:
@@ -323,8 +336,8 @@ def build_pdf(ticket: Ticket, totals: Totals, invoice_number: str, *, fonts: Fon
     for top, height in ((33.1, 10.65), (44.3, 10.65), (55.5, 10.5)):
         p.fill(377.1, top, 8.4, height, 0.753)
     p.fill(377.1, 81.0, 198.1, 14.25, 0.875)
-    for x, width in ((44.6, 46.9), (92.2, 230.3), (323.2, 24.5), (348.4, 22.4),
-                     (371.5, 41.3), (413.5, 28.0), (509.4, 65.8)):
+    for x, width in ((44.6, 13.3), (59.3, 122.5), (182.5, 70.0), (253.0, 91.0),
+                     (345.6, 74.9), (421.2, 86.5), (509.4, 65.8)):
         p.fill(x, 148.9, width, 11.2, 0.875)
     p.fill(346.3, 266.2, 161.0, 10.5, 0.875)
     p.fill(509.4, 266.2, 65.8, 10.5, 0.875)
@@ -365,32 +378,41 @@ def build_pdf(ticket: Ticket, totals: Totals, invoice_number: str, *, fonts: Fon
     if ticket.company_gstin:
         p.text(59.3, 130.85, f"GST No :{ticket.company_gstin}", max_width=313, field="company_gstin")
     p.text(377.1, 130.85, f"Travel: {ticket.travel_date:%d/%m/%Y}", max_width=198.1)
-    p.text(LEFT, 144.1, "Passenger")
-    p.text(91.0, 144.1, f": {ticket.passenger_name}", max_width=281, field="passenger_name")
-
-    p.text(LEFT, 157.4, "PNR")
-    p.text(92.2, 157.4, "Particulars")
-    p.text(RIGHT, 157.4, "Amount", align="right")
-    p.text(LEFT, 170.05, ticket.pnr, max_width=44.9, field="PNR")
-    p.text(92.2, 170.0, ticket.destination, max_width=225, field="destination")
-    p.text(RIGHT, 170.05, f"{totals.net:.2f}", align="right", max_width=65, field="net")
-    p.text(92.2, 180.6, f"Travel: {ticket.travel_date:%d/%m/%Y}", max_width=225)
+    # The model invoice has one compact ticket row. Only collected fields get columns.
+    for x, label in ((46.0, "Sr."), (60.0, "Passenger"), (184.0, "Sector"),
+                     (254.0, "Travel Date"), (347.0, "PNR")):
+        p.text(x, 157.4, label)
+    p.text(507.3, 157.4, "Basic", align="right")
+    p.text(RIGHT, 157.4, "Total", align="right")
+    p.text(46.0, 170.05, "1", max_width=11)
+    p.text(60.0, 170.05, ticket.passenger_name, max_width=121, field="passenger_name")
+    p.text(184.0, 170.05, ticket.destination, max_width=68, field="destination")
+    p.text(254.0, 170.05, f"{ticket.travel_date:%d %b %Y}", max_width=89)
+    p.text(507.3, 170.05, f"{totals.net:.2f}", align="right", max_width=85, field="basic fare")
+    p.text(RIGHT, 170.05, f"{totals.ticket_cost:.2f}", align="right", max_width=65, field="ticket cost")
     if ticket.tbo_pnr and ticket.riya_pnr:
-        p.text(92.2, 191.2, f"TBO: {ticket.tbo_pnr}  RIYA: {ticket.riya_pnr}", max_width=225, field="PNR details")
+        p.text(347.0, 170.05, f"TBO: {ticket.tbo_pnr}", max_width=73, field="TBO PNR")
+        p.text(347.0, 180.6, f"Riya: {ticket.riya_pnr}", max_width=73, field="Riya PNR")
+    else:
+        p.text(347.0, 170.05, ticket.pnr, max_width=73, field="PNR")
+    if totals.seat_amount:
+        p.text(60.0, 191.2, f"Seat amount included in ticket cost: {totals.seat_amount:.2f}",
+               max_width=283, field="seat amount note")
     if ticket.remark:
-        lines = p.wrap(ticket.remark, 225.0, "remark")
+        lines = p.wrap(ticket.remark, 450.0, "remark")
         if len(lines) > 3:
             raise InvoiceError("remark will not fit in the fixed layout. Shorten it.")
         for index, line in enumerate(lines):
-            p.text(92.2, 201.8 + index * 10.55, line, max_width=225, field="remark")
+            p.text(60.0, 201.8 + index * 10.55, line, max_width=450, field="remark")
 
     # Existing summary area now shows the ticket's actual billed components.
     p.text(346.3, 250.9, "Add")
-    p.text(368.7, 250.9, "Mark Up")
-    p.text(RIGHT, 250.95, f"{totals.mark_up:.2f}", align="right", max_width=65, field="mark_up")
+    p.text(368.7, 250.9, "Processing Charges")
+    p.text(RIGHT, 250.95, f"{totals.processing_charges:.2f}", align="right", max_width=65, field="processing charges")
     p.text(346.3, 262.1, "Add")
-    p.text(368.7, 262.15, "Seat Amount")
-    p.text(RIGHT, 262.15, f"{totals.seat_amount:.2f}", align="right", max_width=65, field="seat amount")
+    p.text(368.7, 262.15, "GST")
+    p.text(507.3, 262.15, f"{totals.gst_rate:.3f}%", align="right", max_width=80)
+    p.text(RIGHT, 262.15, f"{totals.gst:.2f}", align="right", max_width=65, field="GST amount")
     p.text(346.3, 274.7, "Net Invoice Amount")
     p.text(RIGHT, 274.75, f"{totals.net_amount:.2f}", align="right", max_width=65, field="net amount")
     p.text(LEFT, 286.65, totals.amount_in_words, max_width=RIGHT - LEFT, field="amount in words")
@@ -460,7 +482,8 @@ def prompt_ticket(prompt: Any = None) -> Ticket:
         "tbo_pnr": ask("TBO PNR", optional=True),
         "riya_pnr": ask("Riya PNR", optional=True),
         "net": ask("NET"),
-        "mark_up": ask("MARK UP", optional=True, default="0.00"),
+        "processing_charges": ask("Processing Charges", optional=True, default="0.00"),
+        "gst_rate": ask("GST rate (%)", optional=True, default="18"),
         "seat_charge": ask("Seat charge", optional=True, default="0.00"),
         "seat_margin": ask("Seat margin", optional=True, default="0.00"),
         "seat_gross": ask("Seat gross", optional=True),
@@ -488,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
         fonts = register_fonts(args.font_regular, args.font_bold, args.font_bold_italic) if args.font_regular else DEFAULT_FONTS
         ticket = prompt_ticket()
         totals = calculate_totals(ticket)
-        print(f"NET: {totals.net:.2f} | MARK UP: {totals.mark_up:.2f} | Seat: {totals.seat_amount:.2f} | Total: {totals.net_amount:.2f}")
+        print(f"Ticket cost: {totals.ticket_cost:.2f} | Processing Charges: {totals.processing_charges:.2f} | GST ({totals.gst_rate:.3f}%): {totals.gst:.2f} | Total: {totals.net_amount:.2f}")
         invoice_number = new_invoice_number(ticket.issued_date)
         path = args.output_dir / f"invoice_{invoice_number}.pdf"
         generate_invoice(ticket, path, invoice_number, fonts=fonts,

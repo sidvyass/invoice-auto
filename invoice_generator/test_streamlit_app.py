@@ -16,13 +16,13 @@ class StreamlitInvoiceTests(unittest.TestCase):
         self.fill("Destination / route", "CCU-BKK-CCU")
         self.fill("TBO PNR (if available)", "9PE7IZ")
         self.fill("NET", "68222.00")
-        self.fill("MARK UP", "1485.00")
+        self.fill("Processing Charges", "1485.00")
         self.fill("Company name", "IMPERIAL FRAGRANCES")
         self.app.button[0].click().run()
         self.assertFalse(self.app.exception)
         first = self.app.session_state["generated_invoice"]
         self.assertTrue(first["pdf"].startswith(b"%PDF-"))
-        self.assertEqual(str(first["totals"].net_amount), "69707.00")
+        self.assertEqual(str(first["totals"].net_amount), "69974.30")
         self.app.run()
         self.assertEqual(self.app.session_state["generated_invoice"]["number"], first["number"])
 
@@ -38,6 +38,18 @@ class StreamlitInvoiceTests(unittest.TestCase):
         self.app.button[0].click().run()
         self.assertNotIn("generated_invoice", self.app.session_state)
         self.assertTrue(self.app.error)
+
+    def test_gst_rate_override(self):
+        self.fill("Passenger name", "MR AMISH NAIK")
+        self.fill("Destination / route", "CCU-BKK-CCU")
+        self.fill("TBO PNR (if available)", "9PE7IZ")
+        self.fill("NET", "8836.00")
+        self.fill("Processing Charges", "350.00")
+        self.fill("GST rate (%)", "5")
+        self.fill("Company name", "IMPERIAL FRAGRANCES")
+        self.app.button[0].click().run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(str(self.app.session_state["generated_invoice"]["totals"].gst), "17.50")
 
 
 if __name__ == "__main__":

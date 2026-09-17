@@ -28,7 +28,8 @@ with st.form("ticket_invoice"):
     st.subheader("Amounts in rupees")
     st.caption("Enter decimal amounts without commas. Blank optional amounts count as zero.")
     net = st.text_input("NET", placeholder="68222.00")
-    mark_up = st.text_input("MARK UP", value="0.00")
+    processing_charges = st.text_input("Processing Charges", value="0.00")
+    gst_rate = st.text_input("GST rate (%)", value="18")
     seat_left, seat_mid, seat_right = st.columns(3)
     with seat_left:
         seat_charge = st.text_input("Seat charge", value="0.00")
@@ -54,7 +55,8 @@ if submitted:
         "tbo_pnr": tbo_pnr,
         "riya_pnr": riya_pnr,
         "net": net,
-        "mark_up": mark_up or "0.00",
+        "processing_charges": processing_charges or "0.00",
+        "gst_rate": gst_rate or "18",
         "seat_charge": seat_charge or "0.00",
         "seat_margin": seat_margin or "0.00",
         "seat_gross": seat_gross,
@@ -77,8 +79,9 @@ if "generated_invoice" in st.session_state:
     totals = result["totals"]
     st.success(f"Invoice {result['number']} is ready.")
     st.write(
-        f"NET: ₹{totals.net:.2f} · MARK UP: ₹{totals.mark_up:.2f} · "
-        f"Seat: ₹{totals.seat_amount:.2f} · **Total: ₹{totals.net_amount:.2f}**"
+        f"Ticket cost: ₹{totals.ticket_cost:.2f} · "
+        f"Processing Charges: ₹{totals.processing_charges:.2f} · "
+        f"GST ({totals.gst_rate:.3f}%): ₹{totals.gst:.2f} · **Total: ₹{totals.net_amount:.2f}**"
     )
     st.download_button(
         "Download invoice PDF",
