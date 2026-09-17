@@ -12,8 +12,6 @@ st.caption("Enter one issued ticket to generate one invoice PDF.")
 
 with st.form("ticket_invoice"):
     st.subheader("Ticket")
-    issued_date = st.date_input("Issued date", value=date.today())
-    travel_date = st.date_input("Travel date", value=date.today())
     passenger_name = st.text_input("Passenger name")
     destination = st.text_input("Destination / route", placeholder="CCU-BKK-CCU")
     pnr_left, pnr_right = st.columns(2)
@@ -21,6 +19,11 @@ with st.form("ticket_invoice"):
         tbo_pnr = st.text_input("TBO PNR (if available)")
     with pnr_right:
         riya_pnr = st.text_input("Riya PNR (if available)")
+    date_left, date_right = st.columns(2)
+    with date_left:
+        issued_date = st.date_input("Issued date", value=date.today())
+    with date_right:
+        travel_date = st.date_input("Travel date", value=date.today())
 
     st.subheader("Amounts in rupees")
     st.caption("Enter decimal amounts without commas. Blank optional amounts count as zero.")
