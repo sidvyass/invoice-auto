@@ -1,0 +1,24 @@
+{
+  "invoice_number": "HI0000006",
+  "invoice_date": "2026-09-14",
+  "customer_name": "IMPERIAL FRARGANCES & FLVOURS PVT LTD",
+  "customer_gstin": "19AAACI5979H1Z3",
+  "place_of_supply": "West Bengal",
+  "state_code": "19",
+  "guest_name": "MR JATISH SETH",
+  "hsn_sac_code": "998551",
+  "items": [
+    {
+      "voucher": "HV6",
+      "description": "ICONIQA Mumbai International (Individual room.\nPremier)",
+      "check_in": "2026-09-21",
+      "check_out": "2026-09-22",
+      "rooms": 1,
+      "rate": "7650.00"
+    }
+  ],
+  "other_charges": "500.00",
+  "igst_rate": "18.000",
+  "igst_taxable_amount": "500.00",
+  "internal_id": "558"
+}
