@@ -9,10 +9,12 @@ Requires Python 3.10 or newer and uv.
 ```sh
 cd invoice_generator
 uv sync
-uv run python invoice_generator.py
+uv run streamlit run streamlit_app.py
 ```
 
-The script prompts for one ticket and writes `invoices/invoice_<generated-number>.pdf`. Run it again for another ticket. Use `--output-dir PATH` to choose a different folder and `--no-stamp` to omit the bundled stamp image. Existing PDFs are never overwritten.
+Open the local URL printed by Streamlit. Fill in one ticket, select **Generate invoice**, review the amount, and download the PDF. Submitting again creates a new invoice number. Downloading or refreshing the page retains the current invoice within that browser session. The web app does not store PDFs on the server.
+
+The CLI remains available with `uv run python invoice_generator.py`. It prompts for one ticket and writes `invoices/invoice_<generated-number>.pdf`. Use `--output-dir PATH` to choose a different folder and `--no-stamp` to omit the bundled stamp image. Existing PDFs are never overwritten.
 
 ## What to enter
 
@@ -24,6 +26,7 @@ The sample JSON is a reference for automated tests; normal users enter the same 
 
 ```sh
 uv run python -m unittest -v test_invoice_generator.py
+uv run python -m unittest -v test_streamlit_app.py
 ```
 
 Long text that cannot fit the fixed page is rejected with an error. The script does not send invoices, track invoice numbers in a ledger, or determine tax treatment.
