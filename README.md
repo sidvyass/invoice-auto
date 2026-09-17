@@ -7,7 +7,6 @@ This script creates one PDF invoice for one issued airline ticket. It uses the c
 Requires Python 3.10 or newer and uv.
 
 ```sh
-cd invoice_generator
 uv sync
 uv run streamlit run streamlit_app.py
 ```

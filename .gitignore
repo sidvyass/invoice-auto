@@ -1,5 +1,5 @@
 .venv/
 __pycache__/
 *.py[cod]
-invoice_generator/invoices/
-invoice_generator/invoice_*.pdf
+invoices/
+invoice_*.pdf
